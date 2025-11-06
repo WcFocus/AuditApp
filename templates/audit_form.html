@@ -2,18 +2,39 @@
 {% block content %}
 <h3>Informe del auditor</h3>
 
-<h5>Resumen</h5>
+<h5>Resumen de Auditoria</h5>
 <ul>
   {% for k,v in summary.items() %}
     <li>{{ k }}: {{ v }}</li>
   {% endfor %}
 </ul>
 
-<form method="post">
+<form method="post" enctype="multipart/form-data">
   <div class="mb-3">
-    <label class="form-label">Informe del auditor (texto que aparecerá en el PDF)</label>
+    <label class="form-label">Empresa auditada</label>
+    <input type="text" class="form-control" name="empresa" required>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Nombre del auditor</label>
+    <input type="text" class="form-control" name="auditor_nombre" required>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Informe del auditor (Informe final de anotaciones y resultado de la auditoria para PDF)</label>
     <textarea class="form-control" name="auditor_text" rows="6"></textarea>
   </div>
+
+  <div class="mb-3">
+    <label class="form-label">Firma del auditor (imagen)</label>
+    <input type="file" class="form-control" name="firma_auditor" accept="image/*">
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Firma de la empresa (imagen)</label>
+    <input type="file" class="form-control" name="firma_empresa" accept="image/*">
+  </div>
+
   <button class="btn btn-success">Guardar informe y generar PDF</button>
 </form>
 

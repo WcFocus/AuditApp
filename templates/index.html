@@ -17,7 +17,7 @@
       <tr>
         <td>{{ q.id }}</td>
         <td>{{ q.text }}</td>
-        <td>{{ q.state or '(sin marcar)' }}</td>
+        <td>{{ q.state or '' }}</td>
         <td>{{ q.observation or '' }}</td>
         <td>
           <a href="{{ url_for('edit_question', q_id=q.id) }}" class="btn btn-sm btn-primary">Editar / Responder</a>
