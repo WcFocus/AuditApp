@@ -146,20 +146,21 @@ def export_pdf(report_id):
     body.append(Paragraph(f"Fecha de generación: {ar.created_at.strftime('%Y-%m-%d %H:%M:%S')}", styles["Normal"]))
     body.append(Spacer(1, 12))
 
-    body.append(Paragraph("Resumen por Estado", heading_style))
+    body.append(Paragraph("Resumen de hallazgos", heading_style))
+    body.append(Spacer(1, 12))
     summary_data = [[Paragraph("<b>Estado</b>", small_style), Paragraph("<b>Cantidad</b>", small_style)]]
     for s in STATES:
         summary_data.append([Paragraph(s, small_style), Paragraph(str(summary[s]), small_style)])
-    summary_table = Table(summary_data, colWidths=[300, 60], hAlign='LEFT')
+    summary_table = Table(summary_data, colWidths=[130, 90], hAlign='LEFT')
     summary_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
         ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
     ]))
     body.append(summary_table)
-    body.append(Spacer(1, 18))
+    body.append(Spacer(1, 15))
 
     body.append(Paragraph("Resultados Detallados", heading_style))
-
+    body.append(Spacer(1, 12))
     table_data = [
         [Paragraph("<b>#</b>", small_style),
          Paragraph("<b>Pregunta</b>", small_style),
@@ -171,11 +172,11 @@ def export_pdf(report_id):
         table_data.append([
             Paragraph(str(q.id), small_style),
             Paragraph(q.text or "(sin texto)", cell_style),
-            Paragraph(q.state or "(sin marcar)", cell_style),
+            Paragraph(q.state or "OK", cell_style),
             Paragraph(q.observation or "(sin observación)", cell_style)
         ])
 
-    details_table = Table(table_data, colWidths=[30, 260, 120, 150], repeatRows=1, hAlign='LEFT')
+    details_table = Table(table_data, colWidths=[30, 200, 80, 210], repeatRows=1, hAlign='LEFT')
     details_table.setStyle(TableStyle([
         ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
         ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
@@ -187,6 +188,7 @@ def export_pdf(report_id):
 
     # *** Aquí aplicamos la corrección de SALTOS DE LÍNEA ***
     body.append(Paragraph("Informe Final del Auditor", heading_style))
+    body.append(Spacer(1, 12))
     auditor_text = (ar.auditor_text or "(sin observaciones)").replace("\n", "<br/>")
     body.append(Paragraph(auditor_text, auditor_style))
 
