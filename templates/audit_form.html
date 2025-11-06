@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h3>Informe del auditor</h3>
+
+<h5>Resumen</h5>
+<ul>
+  {% for k,v in summary.items() %}
+    <li>{{ k }}: {{ v }}</li>
+  {% endfor %}
+</ul>
+
+<form method="post">
+  <div class="mb-3">
+    <label class="form-label">Informe del auditor (texto que aparecerá en el PDF)</label>
+    <textarea class="form-control" name="auditor_text" rows="6"></textarea>
+  </div>
+  <button class="btn btn-success">Guardar informe y generar PDF</button>
+</form>
+
+<hr/>
+<p>Si quieres solo ver las preguntas antes de generar, vuelve a <a href="{{ url_for('index') }}">Preguntas</a> o <a href="{{ url_for('diligenciar') }}">Diligenciar</a>.</p>
+{% endblock %}

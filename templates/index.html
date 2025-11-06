@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<h3>Listado de preguntas</h3>
+<table class="table table-sm">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Pregunta</th>
+      <th>Estado</th>
+      <th>Observación</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for q in questions %}
+    <tr>
+      <td>{{ q.id }}</td>
+      <td>{{ q.text }}</td>
+      <td>{{ q.state or '(sin marcar)' }}</td>
+      <td>{{ q.observation or '' }}</td>
+      <td>
+        <a href="{{ url_for('edit_question', q_id=q.id) }}" class="btn btn-sm btn-primary">Editar / Responder</a>
+        <form action="{{ url_for('delete_question', q_id=q.id) }}" method="post" style="display:inline-block;" onsubmit="return confirm('Eliminar pregunta?');">
+          <button class="btn btn-sm btn-danger">Eliminar</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">No hay preguntas aún.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

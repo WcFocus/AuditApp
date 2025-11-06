@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h3>Nueva pregunta</h3>
+<form method="post">
+  <div class="mb-3">
+    <label class="form-label">Texto de la pregunta</label>
+    <textarea class="form-control" name="text" rows="3" required></textarea>
+  </div>
+  <button class="btn btn-success">Crear</button>
+</form>
+{% endblock %}

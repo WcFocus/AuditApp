@@ -1,0 +1,4 @@
+Flask==2.3.3
+Flask_SQLAlchemy==3.0.3
+SQLAlchemy==2.0.19
+reportlab==4.0.0
