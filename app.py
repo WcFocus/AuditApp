@@ -4,15 +4,16 @@ from io import BytesIO
 from datetime import datetime
 import os
 from werkzeug.utils import secure_filename
+
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, Table
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///audit.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.secret_key = 'cambiar-esta-clave'  # cambia en producción
+app.secret_key = 'cambiar-esta-clave'
 
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -20,6 +21,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 db = SQLAlchemy(app)
 
+# Estados permitidos
 STATES = [
     "Fortalezas",
     "Hallazgos",
@@ -38,15 +40,68 @@ class AuditReport(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     empresa = db.Column(db.String(200), nullable=True)
     auditor_nombre = db.Column(db.String(200), nullable=True)
+    firma_auditor = db.Column(db.String(200), nullable=True)
+    firma_empresa = db.Column(db.String(200), nullable=True)
     auditor_text = db.Column(db.Text, nullable=True)
-    firma_auditor = db.Column(db.String(300), nullable=True)
-    firma_empresa = db.Column(db.String(300), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 with app.app_context():
     db.create_all()
 
-# --- Rutas index, new_question, edit_question, delete_question, diligenciar permanecen igual ---
+@app.route('/')
+def index():
+    questions = Question.query.order_by(Question.id).all()
+    return render_template('index.html', questions=questions, states=STATES)
+
+@app.route('/question/new', methods=['GET','POST'])
+def new_question():
+    if request.method == 'POST':
+        text = request.form.get('text','').strip()
+        if not text:
+            flash('La pregunta no puede estar vacía', 'danger')
+            return redirect(url_for('new_question'))
+        q = Question(text=text)
+        db.session.add(q)
+        db.session.commit()
+        flash('Pregunta creada', 'success')
+        return redirect(url_for('index'))
+    return render_template('question_form.html')
+
+@app.route('/question/<int:q_id>/edit', methods=['GET','POST'])
+def edit_question(q_id):
+    q = Question.query.get_or_404(q_id)
+    if request.method == 'POST':
+        if 'text' in request.form:
+            q.text = request.form.get('text','').strip() or q.text
+            db.session.commit()
+            flash('Pregunta actualizada', 'success')
+            return redirect(url_for('index'))
+        q.state = request.form.get('state')
+        q.observation = request.form.get('observation','').strip()
+        db.session.commit()
+        flash('Respuesta guardada', 'success')
+        return redirect(url_for('index'))
+    return render_template('question_edit.html', q=q, states=STATES)
+
+@app.route('/question/<int:q_id>/delete', methods=['POST'])
+def delete_question(q_id):
+    q = Question.query.get_or_404(q_id)
+    db.session.delete(q)
+    db.session.commit()
+    flash('Pregunta eliminada', 'success')
+    return redirect(url_for('index'))
+
+@app.route('/diligenciar', methods=['GET','POST'])
+def diligenciar():
+    questions = Question.query.order_by(Question.id).all()
+    if request.method == 'POST':
+        for q in questions:
+            q.state = request.form.get(f'state_{q.id}')
+            q.observation = request.form.get(f'obs_{q.id}','').strip()
+        db.session.commit()
+        flash('Todas las respuestas guardadas', 'success')
+        return redirect(url_for('audit_form'))
+    return render_template('diligenciar.html', questions=questions, states=STATES)
 
 @app.route('/audit', methods=['GET','POST'])
 def audit_form():
@@ -55,12 +110,12 @@ def audit_form():
     for q in questions:
         if q.state in summary:
             summary[q.state] += 1
-
     if request.method == 'POST':
         empresa = request.form.get('empresa','').strip()
         auditor_nombre = request.form.get('auditor_nombre','').strip()
         auditor_text = request.form.get('auditor_text','').strip()
 
+        # Guardar imágenes de firma
         firma_auditor_file = request.files.get('firma_auditor')
         firma_empresa_file = request.files.get('firma_empresa')
         firma_auditor_path = None
@@ -86,7 +141,6 @@ def audit_form():
         db.session.add(ar)
         db.session.commit()
         return redirect(url_for('export_pdf', report_id=ar.id))
-
     return render_template('audit_form.html', questions=questions, summary=summary)
 
 @app.route('/report/pdf/<int:report_id>')
@@ -116,6 +170,7 @@ def export_pdf(report_id):
     body.append(Paragraph(f"Fecha de generación: {ar.created_at.strftime('%Y-%m-%d %H:%M:%S')}", styles["Normal"]))
     body.append(Spacer(1, 12))
 
+    # Empresa y auditor
     body.append(Paragraph(f"Empresa auditada: {ar.empresa or '(no definida)'}", styles["Normal"]))
     body.append(Paragraph(f"Auditor: {ar.auditor_nombre or '(no definido)'}", styles["Normal"]))
     body.append(Spacer(1, 12))
@@ -163,36 +218,19 @@ def export_pdf(report_id):
     body.append(Paragraph(auditor_text, auditor_style))
     body.append(Spacer(1, 18))
 
-    # --- Firmas lado a lado ---
-    firma_data = []
-    auditor_img = None
-    empresa_img = None
-
+    # Firmas lado a lado
+    firma_row = []
     if ar.firma_auditor:
-        try:
-            auditor_img = Image(ar.firma_auditor, width=150, height=50)
-        except:
-            pass
+        firma_row.append(Image(ar.firma_auditor, width=200, height=50))
+    else:
+        firma_row.append(Paragraph("____________________", styles["Normal"]))
 
     if ar.firma_empresa:
-        try:
-            empresa_img = Image(ar.firma_empresa, width=150, height=50)
-        except:
-            pass
-
-    # Colocamos firmas en una tabla lado a lado
-    firma_row = []
-    if auditor_img:
-        firma_row.append(auditor_img)
+        firma_row.append(Image(ar.firma_empresa, width=200, height=50))
     else:
         firma_row.append(Paragraph("____________________", styles["Normal"]))
 
-    if empresa_img:
-        firma_row.append(empresa_img)
-    else:
-        firma_row.append(Paragraph("____________________", styles["Normal"]))
-
-    firma_table = Table([firma_row], colWidths=[250, 250], hAlign='CENTER')
+    firma_table = Table([firma_row], colWidths=[270, 270], hAlign='CENTER')
     body.append(firma_table)
 
     # Nombres debajo de cada firma
@@ -200,7 +238,7 @@ def export_pdf(report_id):
         Paragraph("Auditor", styles["Normal"]),
         Paragraph("Empresa", styles["Normal"])
     ]
-    nombre_table = Table([nombre_row], colWidths=[250, 250], hAlign='CENTER')
+    nombre_table = Table([nombre_row], colWidths=[270, 270], hAlign='CENTER')
     body.append(nombre_table)
 
     doc.build(body)
