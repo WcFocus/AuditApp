@@ -3,7 +3,13 @@ from flask_sqlalchemy import SQLAlchemy
 from io import BytesIO
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.units import mm
+from reportlab.lib import colors
 from datetime import datetime
+import textwrap
+import os
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///audit.db'
@@ -121,7 +127,73 @@ def audit_form():
         return redirect(url_for('export_pdf', report_id=ar.id))
     return render_template('audit_form.html', questions=questions, summary=summary)
 
-# Generar PDF y descargar (usa reportlab)
+# ---------- Helpers para el PDF (canvas) ----------
+def draw_wrapped(c, text, x, y, max_width, fontname="Helvetica", fontsize=10, leading=12):
+    """
+    Dibuja texto ajustado en canvas. Devuelve la nueva coordenada y (moviéndose hacia abajo).
+    - text: string (puede contener saltos de línea)
+    - x,y: coordenada de inicio (y es la línea superior)
+    - max_width: ancho máximo en puntos
+    - fontsize: tamaño de fuente
+    - leading: espacio vertical entre líneas
+    """
+    if not text:
+        return y - leading
+    # Asegurarnos de usar la fuente indicada
+    c.setFont(fontname, fontsize)
+
+    # Separar en párrafos por saltos de línea y envolver cada párrafo
+    paragraphs = text.splitlines()
+    for para in paragraphs:
+        # quitar espacios extras
+        para = para.strip()
+        if not para:
+            y -= leading
+            continue
+
+        # Usar textwrap para generar líneas aproximadas en caracteres,
+        # pero ajustaremos a ancho real con stringWidth para mayor precisión.
+        # Estimamos chars_per_line y luego refinamos
+        avg_char_width = pdfmetrics.stringWidth("M", fontname, fontsize)
+        if avg_char_width == 0:
+            avg_char_width = fontsize * 0.5
+        est_chars = max(int(max_width / avg_char_width), 20)
+        wrapped = textwrap.wrap(para, width=est_chars)
+
+        # Refinar: asegurar que cada línea no exceda max_width
+        refined = []
+        for line in wrapped:
+            # Si la línea es corta en ancho, ok; si no, partir por palabras
+            if pdfmetrics.stringWidth(line, fontname, fontsize) <= max_width:
+                refined.append(line)
+            else:
+                words = line.split(' ')
+                cur = ""
+                for w in words:
+                    test = (cur + " " + w).strip()
+                    if pdfmetrics.stringWidth(test, fontname, fontsize) <= max_width:
+                        cur = test
+                    else:
+                        if cur:
+                            refined.append(cur)
+                        cur = w
+                if cur:
+                    refined.append(cur)
+
+        for rl in refined:
+            # Si la Y baja demasiado, retornar una señal especial (None) para nueva página
+            if y < 60:  # margen inferior aproximado
+                return None, rl  # señal para crear nueva página y re-dibujar esta línea ahí
+            c.drawString(x, y, rl)
+            y -= leading
+    return y, None
+
+def draw_separator(c, x1, x2, y):
+    c.setStrokeColor(colors.grey)
+    c.setLineWidth(0.5)
+    c.line(x1, y, x2, y)
+
+# Generar PDF y descargar (usa reportlab canvas) - versión corregida
 @app.route('/report/pdf/<int:report_id>')
 def export_pdf(report_id):
     ar = AuditReport.query.get_or_404(report_id)
@@ -137,76 +209,141 @@ def export_pdf(report_id):
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
     margin = 40
+    line_height = 12
+
+    # Intento de registrar una fuente TrueType (opcional). Si falla, queda Helvetica.
+    try:
+        # Si tienes una fuente ttf local, puedes registrarla aquí. Ej:
+        # pdfmetrics.registerFont(TTFont('Inter', '/ruta/a/Inter-Regular.ttf'))
+        pass
+    except Exception:
+        pass
+
+    # Página 1: encabezado y resumen + informe del auditor
+    p.setFont("Helvetica-Bold", 16)
     y = height - margin
-
-    # Encabezado
-    p.setFont("Helvetica-Bold", 14)
     p.drawString(margin, y, "Informe de Auditoría")
-    y -= 20
-    p.setFont("Helvetica", 10)
-    p.drawString(margin, y, f"Fecha: {ar.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
-    y -= 25
+    p.setFont("Helvetica", 9)
+    p.drawRightString(width - margin, y, f"Fecha: {ar.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+    y -= 18
+    draw_separator(p, margin, width - margin, y)
+    y -= 12
 
-    # Totales
+    # Resumen
     p.setFont("Helvetica-Bold", 11)
     p.drawString(margin, y, "Resumen (conteo por estado):")
-    y -= 15
+    y -= 14
     p.setFont("Helvetica", 10)
     for s in STATES:
-        p.drawString(margin + 10, y, f"- {s}: {summary.get(s,0)}")
-        y -= 12
+        text = f"- {s}: {summary.get(s,0)}"
+        # dibujar resumen (no suelen ser largos)
+        p.drawString(margin + 8, y, text)
+        y -= line_height
     y -= 8
+    draw_separator(p, margin, width - margin, y)
+    y -= 12
 
-    # Informe del auditor
+    # Informe del auditor (puede ser largo) - usar wrapper con chequeo de nueva página
     p.setFont("Helvetica-Bold", 11)
     p.drawString(margin, y, "Informe del auditor:")
     y -= 14
     p.setFont("Helvetica", 10)
+    max_text_width = width - margin*2 - 10
+    auditor_text = ar.auditor_text or "(sin texto)"
 
-    # dividir el texto del auditor en líneas
-    auditor_lines = ar.auditor_text.splitlines() if ar.auditor_text else ["(sin texto)"]
-    for line in auditor_lines:
-        if y < margin + 60:  # nueva página si no hay espacio
+    # Llamar a draw_wrapped. Si devuelve None, crear nueva página y reintentar con la línea sobrante
+    remaining = None
+    wrapped_y = y
+    # draw_wrapped returns (new_y, None) on success, or (None, leftover_line) to signal new page
+    result = draw_wrapped(p, auditor_text, margin + 6, wrapped_y, max_text_width, fontname="Helvetica", fontsize=10, leading=14)
+    if result is None:
+        # safety, shouldn't happen
+        pass
+    else:
+        new_y, leftover = result
+        # Si leftover es not None, significa que precisamos nueva página y dibujar el leftover ahí
+        if new_y is None and leftover:
+            # nueva página
             p.showPage()
+            p.setFont("Helvetica-Bold", 16)
             y = height - margin
-        p.drawString(margin + 10, y, line)
-        y -= 12
-    y -= 10
+            p.setFont("Helvetica-Bold", 11)
+            p.drawString(margin, y, "Informe de Auditoría (continuación)")
+            y -= 20
+            p.setFont("Helvetica", 10)
+            # dibujar leftover y continuar dibujando el resto text (llamamos otra vez con el texto completo
+            # para simplificar: volveremos a usar draw_wrapped sobre todo el auditor_text desde top of new page)
+            result2 = draw_wrapped(p, auditor_text, margin + 6, y, max_text_width, fontname="Helvetica", fontsize=10, leading=14)
+            if result2 and result2[0] is not None:
+                y = result2[0]
+            else:
+                y = height - margin  # fallback
+        else:
+            y = new_y
 
-    # Lista de preguntas con estado y observación
+    # Espacio antes de siguientes secciones
+    y -= 10
+    # Si ya no hay espacio, nueva página antes de preguntas
+    if y < 120:
+        p.showPage()
+        y = height - margin
+
+    # Lista de preguntas con estado y observación (cada pregunta puede ocupar varias líneas)
     p.setFont("Helvetica-Bold", 11)
     p.drawString(margin, y, "Preguntas respondidas:")
-    y -= 14
+    y -= 16
     p.setFont("Helvetica", 9)
+
+    max_text_width = width - margin*2 - 20
+
     for q in questions:
-        # Si no hay espacio suficiente, nueva página
-        if y < margin + 60:
+        # Si espacio insuficiente, nueva página
+        if y < 100:
             p.showPage()
             y = height - margin
-        # Pregunta
-        p.drawString(margin+4, y, f"{q.id}. {q.text}")
-        y -= 12
+            p.setFont("Helvetica", 9)
+
+        # Pregunta (negrita)
+        p.setFont("Helvetica-Bold", 10)
+        q_text = f"{q.id}. {q.text}"
+        # usar draw_wrapped para la pregunta. Si necesita nueva página, manejarlo
+        res = draw_wrapped(p, q_text, margin+4, y, max_text_width, fontname="Helvetica-Bold", fontsize=10, leading=13)
+        if res is None:
+            # safety fallback
+            p.showPage()
+            y = height - margin
+            res = draw_wrapped(p, q_text, margin+4, y, max_text_width, fontname="Helvetica-Bold", fontsize=10, leading=13)
+        y, leftover = res
+
         # Estado
         estado = q.state or "(sin marcar)"
-        p.drawString(margin+16, y, f"Estado: {estado}")
+        p.setFont("Helvetica", 9)
+        if y < 80:
+            p.showPage()
+            y = height - margin
+        p.drawString(margin+12, y, f"Estado: {estado}")
         y -= 12
-        # Observación (puede necesitar varias líneas)
+
+        # Observación (wrap)
         obs = q.observation or ""
         if obs:
-            # partir la observacion en trozos de 95 chars aproximados
-            max_chars = 95
-            parts = [obs[i:i+max_chars] for i in range(0, len(obs), max_chars)]
-            for part in parts:
-                if y < margin + 40:
-                    p.showPage()
-                    y = height - margin
-                p.drawString(margin+16, y, f"Obs: {part}")
-                y -= 12
+            res_obs = draw_wrapped(p, f"Obs: {obs}", margin+12, y, max_text_width, fontname="Helvetica", fontsize=9, leading=12)
+            if res_obs is None:
+                # nueva página y re-dibujar el resto del texto desde top
+                p.showPage()
+                y = height - margin
+                res_obs = draw_wrapped(p, f"Obs: {obs}", margin+12, y, max_text_width, fontname="Helvetica", fontsize=9, leading=12)
+            y, leftover = res_obs
         else:
-            p.drawString(margin+16, y, "Obs: (sin observación)")
+            p.drawString(margin+12, y, "Obs: (sin observación)")
             y -= 12
-        y -= 6
 
+        # separador entre preguntas
+        y -= 6
+        draw_separator(p, margin+4, width - margin - 4, y)
+        y -= 10
+
+    # Finalizar
     p.showPage()
     p.save()
     buffer.seek(0)
