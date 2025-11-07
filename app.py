@@ -10,6 +10,10 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 
+# NUEVO PARA WORD
+from docx import Document
+from docx.shared import Inches, Pt
+
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///audit.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -110,12 +114,12 @@ def audit_form():
     for q in questions:
         if q.state in summary:
             summary[q.state] += 1
+
     if request.method == 'POST':
         empresa = request.form.get('empresa','').strip()
         auditor_nombre = request.form.get('auditor_nombre','').strip()
         auditor_text = request.form.get('auditor_text','').strip()
 
-        # Guardar imágenes de firma
         firma_auditor_file = request.files.get('firma_auditor')
         firma_empresa_file = request.files.get('firma_empresa')
         firma_auditor_path = None
@@ -140,9 +144,90 @@ def audit_form():
         )
         db.session.add(ar)
         db.session.commit()
+
+        if request.form.get("generate") == "word":
+            return redirect(url_for('export_word', report_id=ar.id))
         return redirect(url_for('export_pdf', report_id=ar.id))
+
     return render_template('audit_form.html', questions=questions, summary=summary)
 
+# ---------- EXPORTAR WORD (CORREGIDO) ----------
+@app.route('/report/word/<int:report_id>')
+def export_word(report_id):
+    ar = AuditReport.query.get_or_404(report_id)
+    questions = Question.query.order_by(Question.id).all()
+
+    summary = {s: 0 for s in STATES}
+    for q in questions:
+        if q.state in summary:
+            summary[q.state] += 1
+
+    doc = Document()
+    doc.add_heading('INFORME DE AUDITORÍA', level=1)
+    doc.add_paragraph(f"Fecha de generación: {ar.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+    doc.add_paragraph(f"Empresa auditada: {ar.empresa or '(no definida)'}")
+    doc.add_paragraph(f"Auditor: {ar.auditor_nombre or '(no definido)'}")
+    doc.add_paragraph("")
+
+    doc.add_heading("Resumen de hallazgos", level=2)
+    table = doc.add_table(rows=1, cols=2)
+    hdr = table.rows[0].cells
+    hdr[0].text = "Estado"
+    hdr[1].text = "Cantidad"
+    for s in STATES:
+        row = table.add_row().cells
+        row[0].text = s
+        row[1].text = str(summary[s])
+
+    doc.add_paragraph("")
+    doc.add_heading("Resultados Detallados", level=2)
+    
+    table = doc.add_table(rows=1, cols=4)
+    hdr = table.rows[0].cells
+    hdr[0].text = "#"
+    hdr[1].text = "Pregunta"
+    hdr[2].text = "Estado"
+    hdr[3].text = "Observación"
+
+    for q in questions:
+        row = table.add_row().cells
+        row[0].text = str(q.id)
+        row[1].text = q.text
+        row[2].text = q.state or "(sin estado)"
+        row[3].text = q.observation or "(sin observación)"
+
+    doc.add_paragraph("")
+    doc.add_heading("Informe Final del Auditor", level=2)
+    doc.add_paragraph(ar.auditor_text or "(sin observaciones)")
+
+    doc.add_paragraph("")
+    doc.add_heading("Firmas", level=2)
+
+    signatures = doc.add_table(rows=2, cols=2)
+    sig_titles = signatures.rows[0].cells
+    sig_titles[0].text = "Auditor"
+    sig_titles[1].text = "Empresa"
+
+    sig_images = signatures.rows[1].cells
+
+    if ar.firma_auditor:
+        sig_images[0].paragraphs[0].add_run().add_picture(ar.firma_auditor, width=Inches(2))
+    else:
+        sig_images[0].text = "______________________"
+
+    if ar.firma_empresa:
+        sig_images[1].paragraphs[0].add_run().add_picture(ar.firma_empresa, width=Inches(2))
+    else:
+        sig_images[1].text = "______________________"
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+
+    filename = f"informe_auditoria_{ar.created_at.strftime('%Y%m%d_%H%M%S')}.docx"
+    return send_file(buffer, as_attachment=True, download_name=filename, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+# ---------- EXPORTAR PDF (SIN CAMBIOS) ----------
 @app.route('/report/pdf/<int:report_id>')
 def export_pdf(report_id):
     ar = AuditReport.query.get_or_404(report_id)
@@ -169,8 +254,6 @@ def export_pdf(report_id):
     body.append(Paragraph("INFORME DE AUDITORÍA", title_style))
     body.append(Paragraph(f"Fecha de generación: {ar.created_at.strftime('%Y-%m-%d %H:%M:%S')}", styles["Normal"]))
     body.append(Spacer(1, 12))
-
-    # Empresa y auditor
     body.append(Paragraph(f"Empresa auditada: {ar.empresa or '(no definida)'}", styles["Normal"]))
     body.append(Paragraph(f"Auditor: {ar.auditor_nombre or '(no definido)'}", styles["Normal"]))
     body.append(Spacer(1, 12))
@@ -218,7 +301,6 @@ def export_pdf(report_id):
     body.append(Paragraph(auditor_text, auditor_style))
     body.append(Spacer(1, 18))
 
-    # Firmas lado a lado
     firma_row = []
     if ar.firma_auditor:
         firma_row.append(Image(ar.firma_auditor, width=200, height=50))
@@ -233,7 +315,6 @@ def export_pdf(report_id):
     firma_table = Table([firma_row], colWidths=[270, 270], hAlign='CENTER')
     body.append(firma_table)
 
-    # Nombres debajo de cada firma
     nombre_row = [
         Paragraph("Auditor", styles["Normal"]),
         Paragraph("Empresa", styles["Normal"])

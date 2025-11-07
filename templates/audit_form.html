@@ -21,7 +21,7 @@
   </div>
 
   <div class="mb-3">
-    <label class="form-label">Informe del auditor (Informe final de anotaciones y resultado de la auditoria para PDF)</label>
+    <label class="form-label">Informe del auditor (Informe final de anotaciones y resultado de la auditoria)</label>
     <textarea class="form-control" name="auditor_text" rows="6"></textarea>
   </div>
 
@@ -35,7 +35,8 @@
     <input type="file" class="form-control" name="firma_empresa" accept="image/*">
   </div>
 
-  <button class="btn btn-success">Guardar informe y generar PDF</button>
+  <button type="submit" name="generate" value="pdf" class="btn btn-success">Guardar y generar PDF</button>
+  <button type="submit" name="generate" value="word" class="btn btn-primary">Guardar y generar Word</button>
 </form>
 
 <hr/>
