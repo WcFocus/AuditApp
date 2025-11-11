@@ -37,7 +37,7 @@
     <tbody>
       {% for q in questions %}
       <tr>
-        <td>{{ q.id }}</td>
+        <td>{{ loop.index }}</td>
         <td>{{ q.text }}</td>
         <td>{{ q.state or '' }}</td>
         <td>{{ q.observation or '' }}</td>

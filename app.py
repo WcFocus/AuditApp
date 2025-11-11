@@ -51,7 +51,6 @@ STATES = [
 class Empresa(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(200), nullable=False, unique=True)
-    # relationship: empresa.questions
 
 class Question(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -77,17 +76,6 @@ with app.app_context():
 
 # ---------- Helpers ----------
 def compute_compliance(summary_counts):
-    """
-    summary_counts: dict with keys = STATES and values = counts
-    Returns: (pct_compliance_float, status_string)
-    Logic:
-      cumplimiento = (Fortalezas + Observaciones) / total_answered * 100
-      thresholds:
-        >=85% -> 'Cumple'
-        60-84.99 -> 'Cumplimiento Parcial'
-        <60 -> 'No Cumple'
-    If total_answered == 0, returns (0.0, 'Sin respuestas').
-    """
     favorable = summary_counts.get("Fortalezas", 0) + summary_counts.get("Observaciones", 0)
     total = sum(summary_counts.values())
     if total == 0:
@@ -103,12 +91,6 @@ def compute_compliance(summary_counts):
     return pct_rounded, status
 
 def draw_gauge(pct, filename, title=None, size=(8,4)):
-    """
-    Dibuja un medidor semicircular y lo guarda como PNG en `filename`.
-    pct: 0..100
-    filename: ruta de salida
-    """
-    # Normalize
     pct = max(0.0, min(100.0, float(pct)))
 
     fig = plt.figure(figsize=size, dpi=150)
@@ -117,52 +99,35 @@ def draw_gauge(pct, filename, title=None, size=(8,4)):
     ax.set_ylim(-0.05, 1.2)
     ax.axis('off')
 
-    # Draw colored wedges from red (0%) to green (100%)
-    # We'll draw 5 segments corresponding to ranges (0-20,20-40,40-60,60-80,80-100)
     ranges = [(0,20),(20,40),(40,60),(60,80),(80,100)]
-    colors_list = ['#e53935','#fb8c00','#fdd835','#c6e48b','#2e8b57']  # red->orange->yellow->lightgreen->green
-
-    # Draw segments as Wedge patches centered at (0,0) but we will convert to polar positions by computing arcs
-    # We'll place wedges by using patches.Wedge with angles in degrees.
+    colors_list = ['#e53935','#fb8c00','#fdd835','#c6e48b','#2e8b57']
     inner_r = 0.25
     outer_r = 1.0
-    start_angle = 180  # left
+    start_angle = 180
+
     for i, r in enumerate(ranges):
         seg_start = start_angle - (r[0] / 100.0) * 180.0
         seg_end = start_angle - (r[1] / 100.0) * 180.0
         wedge = patches.Wedge((0,0), outer_r, theta1=seg_end, theta2=seg_start, width=outer_r - inner_r, facecolor=colors_list[i], edgecolor='white')
         ax.add_patch(wedge)
 
-    # Draw ticks and labels (0,25,50,75,100)
     for val in [0,25,50,75,100]:
-        angle_deg = 180 - (val/100.0) * 180.0
+        angle_deg = 180 - (val/100.0)*180.0
         angle_rad = math.radians(angle_deg)
-        x_outer = math.cos(angle_rad) * (outer_r + 0.02)
-        y_outer = math.sin(angle_rad) * (outer_r + 0.02)
-        x_inner = math.cos(angle_rad) * (inner_r - 0.02)
-        y_inner = math.sin(angle_rad) * (inner_r - 0.02)
-        ax.plot([x_inner, x_outer], [y_inner, y_outer], lw=0, color='black')
-        # labels
         lx = math.cos(angle_rad) * (outer_r + 0.12)
         ly = math.sin(angle_rad) * (outer_r + 0.12)
-        ax.text(lx, ly, f"{val}", horizontalalignment='center', verticalalignment='center', fontsize=8)
+        ax.text(lx, ly, f"{val}", ha='center', va='center', fontsize=8)
 
-    # Draw needle
-    # Map pct 0->180deg, 100->0deg
-    angle_deg = 180 - (pct/100.0) * 180.0
+    angle_deg = 180 - (pct/100.0)*180.0
     angle_rad = math.radians(angle_deg)
     needle_len = (outer_r + inner_r)/2 + 0.05
-    nx = math.cos(angle_rad) * needle_len
-    ny = math.sin(angle_rad) * needle_len
-    ax.plot([0, nx], [0, ny], lw=4, color='#0b3d91')  # needle
-    # center circle
-    center_circle = patches.Circle((0,0), 0.06, facecolor='#0b3d91', zorder=5)
-    ax.add_patch(center_circle)
+    nx = math.cos(angle_rad)*needle_len
+    ny = math.sin(angle_rad)*needle_len
+    ax.plot([0,nx],[0,ny], lw=4, color='#0b3d91')
+    ax.add_patch(patches.Circle((0,0),0.06,fc='#0b3d91'))
 
-    # Title and percent text
     if title:
-        ax.text(0, 1.05, title, horizontalalignment='center', fontsize=12, weight='bold')
-    #ax.text(0, -0.02, f"{pct:.1f}% - {('Sin respuestas' if pct==0 and pct!=100 else '')}", horizontalalignment='center', fontsize=10)
+        ax.text(0, 1.05, title, ha='center', fontsize=12, weight='bold')
 
     plt.savefig(filename, bbox_inches='tight', pad_inches=0.1)
     plt.close(fig)
@@ -303,11 +268,10 @@ def empresa_upload(empresa_id):
             flash(f'Se importaron {added} preguntas para la empresa "{e.nombre}"', 'success')
         except Exception as ex:
             flash(f'Error al leer el archivo: {ex}', 'danger')
-        # volver a la vista de preguntas de la empresa (no a empresas)
         return redirect(url_for('empresa_questions', empresa_id=empresa_id))
     return render_template('upload_questions.html', empresa=e)
 
-# ---------------- PÁGINAS POR EMPRESA (diligenciar, informe, export) ----------------
+# ---------------- PÁGINAS POR EMPRESA ----------------
 @app.route('/empresa/<int:empresa_id>/preguntas')
 def empresa_questions(empresa_id):
     e = Empresa.query.get_or_404(empresa_id)
@@ -324,7 +288,6 @@ def empresa_diligenciar(empresa_id):
             q.observation = request.form.get(f'obs_{q.id}','').strip()
         db.session.commit()
         flash('Respuestas guardadas', 'success')
-        # volver a preguntas de la empresa (no al informe)
         return redirect(url_for('empresa_questions', empresa_id=empresa_id))
     return render_template('empresa_diligenciar.html', empresa=e, questions=questions, states=STATES)
 
@@ -336,10 +299,10 @@ def empresa_audit(empresa_id):
     for q in questions:
         if q.state in summary:
             summary[q.state] += 1
+
     if request.method == 'POST':
         auditor_nombre = request.form.get('auditor_nombre','').strip()
         auditor_text = request.form.get('auditor_text','').strip()
-        # firmas opcionales
         firma_auditor_file = request.files.get('firma_auditor')
         firma_empresa_file = request.files.get('firma_empresa')
         firma_auditor_path = None
@@ -366,13 +329,12 @@ def empresa_audit(empresa_id):
         db.session.add(ar)
         db.session.commit()
 
-        # elegir si generar word o pdf
         if request.form.get('generate') == 'word':
             return redirect(url_for('export_word_by_empresa', empresa_id=empresa_id, report_id=ar.id))
         return redirect(url_for('export_pdf_by_empresa', empresa_id=empresa_id, report_id=ar.id))
     return render_template('empresa_audit_form.html', empresa=e, questions=questions, summary=summary)
 
-# ---------------- EXPORTAR WORD / PDF POR EMPRESA ----------------
+# ---------------- WORD EXPORT ----------------
 @app.route('/empresa/<int:empresa_id>/report/word/<int:report_id>')
 def export_word_by_empresa(empresa_id, report_id):
     ar = AuditReport.query.get_or_404(report_id)
@@ -383,14 +345,12 @@ def export_word_by_empresa(empresa_id, report_id):
         if q.state in summary:
             summary[q.state] += 1
 
-    # calcular cumplimiento
     pct, status = compute_compliance(summary)
 
-    # generar medidor (gauge) y guardarlo en uploads
     gauge_filename = os.path.join(app.config['UPLOAD_FOLDER'], f"gauge_emp{empresa_id}_r{report_id}_{int(datetime.utcnow().timestamp())}.png")
     try:
         draw_gauge(pct, gauge_filename, title=f"Cumplimiento: {pct}%")
-    except Exception as ex:
+    except:
         gauge_filename = None
 
     doc = Document()
@@ -410,7 +370,6 @@ def export_word_by_empresa(empresa_id, report_id):
         row[0].text = s
         row[1].text = str(summary[s])
 
-    # Indicador de cumplimiento (Word) - texto y medidor si se generó
     doc.add_paragraph("")
     p = doc.add_paragraph()
     run = p.add_run(f"Cumplimiento: {pct}%  —  Resultado: {status}")
@@ -420,8 +379,7 @@ def export_word_by_empresa(empresa_id, report_id):
     if gauge_filename and os.path.exists(gauge_filename):
         try:
             doc.add_picture(gauge_filename, width=Inches(6))
-        except Exception:
-            # si falla, no interrumpe
+        except:
             pass
 
     doc.add_paragraph("")
@@ -432,9 +390,10 @@ def export_word_by_empresa(empresa_id, report_id):
     hdr[1].text = "Pregunta"
     hdr[2].text = "Estado"
     hdr[3].text = "Observación"
-    for q in questions:
+
+    for i, q in enumerate(questions, start=1):
         row = table.add_row().cells
-        row[0].text = str(q.id)
+        row[0].text = str(i)
         row[1].text = q.text
         row[2].text = q.state or "(sin estado)"
         row[3].text = q.observation or "(sin observación)"
@@ -453,14 +412,14 @@ def export_word_by_empresa(empresa_id, report_id):
     if ar.firma_auditor:
         try:
             sig_images[0].paragraphs[0].add_run().add_picture(ar.firma_auditor, width=Inches(2))
-        except Exception:
+        except:
             sig_images[0].text = "(Imagen no disponible)"
     else:
         sig_images[0].text = "______________________"
     if ar.firma_empresa:
         try:
             sig_images[1].paragraphs[0].add_run().add_picture(ar.firma_empresa, width=Inches(2))
-        except Exception:
+        except:
             sig_images[1].text = "(Imagen no disponible)"
     else:
         sig_images[1].text = "______________________"
@@ -471,6 +430,7 @@ def export_word_by_empresa(empresa_id, report_id):
     filename = f"informe_{ar.empresa_nombre or 'empresa'}_{ar.created_at.strftime('%Y%m%d_%H%M%S')}.docx"
     return send_file(buffer, as_attachment=True, download_name=filename, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 
+# ---------------- PDF EXPORT ----------------
 @app.route('/empresa/<int:empresa_id>/report/pdf/<int:report_id>')
 def export_pdf_by_empresa(empresa_id, report_id):
     ar = AuditReport.query.get_or_404(report_id)
@@ -481,14 +441,12 @@ def export_pdf_by_empresa(empresa_id, report_id):
         if q.state in summary:
             summary[q.state] += 1
 
-    # calcular cumplimiento
     pct, status = compute_compliance(summary)
 
-    # generar medidor (gauge) y guardarlo en uploads
     gauge_filename = os.path.join(app.config['UPLOAD_FOLDER'], f"gauge_emp{empresa_id}_r{report_id}_{int(datetime.utcnow().timestamp())}.png")
     try:
         draw_gauge(pct, gauge_filename, title=f"Cumplimiento: {pct}%")
-    except Exception:
+    except:
         gauge_filename = None
 
     buffer = BytesIO()
@@ -511,7 +469,6 @@ def export_pdf_by_empresa(empresa_id, report_id):
     body.append(Paragraph(f"Auditor: {ar.auditor_nombre or '(no definido)'}", styles["Normal"]))
     body.append(Spacer(1, 12))
 
-    # Resumen de hallazgos
     body.append(Paragraph("Resumen de hallazgos", heading_style))
     body.append(Spacer(1, 12))
     summary_data = [[Paragraph("<b>Estado</b>", small_style), Paragraph("<b>Cantidad</b>", small_style)]]
@@ -525,7 +482,6 @@ def export_pdf_by_empresa(empresa_id, report_id):
     body.append(summary_table)
     body.append(Spacer(1, 12))
 
-    # Resultados detallados
     body.append(Paragraph("Resultados Detallados", heading_style))
     body.append(Spacer(1, 12))
     table_data = [
@@ -534,13 +490,15 @@ def export_pdf_by_empresa(empresa_id, report_id):
          Paragraph("<b>Estado</b>", small_style),
          Paragraph("<b>Observación</b>", small_style)]
     ]
-    for q in questions:
+
+    for i, q in enumerate(questions, start=1):
         table_data.append([
-            Paragraph(str(q.id), small_style),
+            Paragraph(str(i), small_style),
             Paragraph(q.text or "(sin texto)", cell_style),
-            Paragraph(q.state or "(sin estado)", cell_style),
+            Paragraph(q.state or "(OK)", cell_style),
             Paragraph(q.observation or "(sin observación)", cell_style)
         ])
+
     details_table = Table(table_data, colWidths=[30, 260, 90, 160], repeatRows=1, hAlign='LEFT')
     details_table.setStyle(TableStyle([
         ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
@@ -550,35 +508,29 @@ def export_pdf_by_empresa(empresa_id, report_id):
     body.append(details_table)
     body.append(Spacer(1, 18))
 
-    # Indicador de cumplimiento (PDF) - texto
     indicator_text = f"Cumplimiento de la auditoria: {pct}%  —  Resultado obtenido: {status}"
     body.append(Paragraph(indicator_text, indicator_style))
     body.append(Spacer(1, 8))
 
-    # Insertar imagen del gauge si existe
     if gauge_filename and os.path.exists(gauge_filename):
         try:
-            # Insert at a reasonable display size
             img = Image(gauge_filename, width=400, height=200)
             body.append(img)
             body.append(Spacer(1, 12))
-        except Exception:
+        except:
             pass
 
-
-    # Informe final
     body.append(Paragraph("Informe Final del Auditor", heading_style))
     body.append(Spacer(1, 12))
     auditor_text = (ar.auditor_text or "(sin observaciones)").replace("\n", "<br/>")
     body.append(Paragraph(auditor_text, auditor_style))
     body.append(Spacer(1, 18))
 
-    # Firmas
     firma_row = []
     if ar.firma_auditor:
         try:
             firma_row.append(Image(ar.firma_auditor, width=200, height=50))
-        except Exception:
+        except:
             firma_row.append(Paragraph(" (firma auditor no disponible) ", styles["Normal"]))
     else:
         firma_row.append(Paragraph("____________________", styles["Normal"]))
@@ -586,7 +538,7 @@ def export_pdf_by_empresa(empresa_id, report_id):
     if ar.firma_empresa:
         try:
             firma_row.append(Image(ar.firma_empresa, width=200, height=50))
-        except Exception:
+        except:
             firma_row.append(Paragraph(" (firma empresa no disponible) ", styles["Normal"]))
     else:
         firma_row.append(Paragraph("____________________", styles["Normal"]))
@@ -606,7 +558,7 @@ def export_pdf_by_empresa(empresa_id, report_id):
     filename = f"informe_{ar.empresa_nombre or 'empresa'}_{ar.created_at.strftime('%Y%m%d_%H%M%S')}.pdf"
     return send_file(buffer, as_attachment=True, download_name=filename, mimetype='application/pdf')
 
-# ---------------- ADICIONES: agregar manual, eliminar todas, exportar a XLSX ----------------
+# ---------------- ADICIONES ----------------
 @app.route("/empresa/<int:empresa_id>/add_manual", methods=["POST"])
 def add_question_manual(empresa_id):
     text = request.form.get("question_text", "").strip()

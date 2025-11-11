@@ -5,15 +5,23 @@
   <form method="post">
     {% for q in questions %}
       <div class="mb-3 p-3 border rounded shadow-sm bg-white">
-        <h6 class="fw-semibold text-primary mb-2">{{ q.id }}. {{ q.text }}</h6>
+        <!-- Numeración corregida -->
+        <h6 class="fw-semibold text-primary mb-2">{{ loop.index }}. {{ q.text }}</h6>
+
         <div class="mb-2">
           {% for s in states %}
             <div class="form-check form-check-inline">
-              <input class="form-check-input" type="radio" name="state_{{ q.id }}" id="q{{ q.id }}_{{ loop.index }}" value="{{ s }}" {% if q.state==s %}checked{% endif %}>
-              <label class="form-check-label" for="q{{ q.id }}_{{ loop.index }}">{{ s }}</label>
+              <!-- Usamos loop.index0 para s y loop.index para q -->
+              <input class="form-check-input" type="radio" 
+                     name="state_{{ q.id }}" 
+                     id="q{{ q.id }}_{{ loop.index0 }}_{{ loop.index }}" 
+                     value="{{ s }}" {% if q.state==s %}checked{% endif %}>
+              <label class="form-check-label" 
+                     for="q{{ q.id }}_{{ loop.index0 }}_{{ loop.index }}">{{ s }}</label>
             </div>
           {% endfor %}
         </div>
+
         <textarea class="form-control" name="obs_{{ q.id }}" rows="2" placeholder="Observación...">{{ q.observation }}</textarea>
       </div>
     {% else %}
