@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card-custom">
+  <h3>Informe - {{ empresa.nombre }}</h3>
+
+  <h5>Resumen</h5>
+  <ul>
+    {% for k,v in summary.items() %}
+      <li>{{ k }}: {{ v }}</li>
+    {% endfor %}
+  </ul>
+
+  <form method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+      <label class="form-label">Nombre del auditor</label>
+      <input type="text" class="form-control" name="auditor_nombre" required>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Informe del auditor</label>
+      <textarea class="form-control" name="auditor_text" rows="6"></textarea>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Firma del auditor (imagen)</label>
+      <input type="file" class="form-control" name="firma_auditor" accept="image/*">
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Firma de la empresa (imagen)</label>
+      <input type="file" class="form-control" name="firma_empresa" accept="image/*">
+    </div>
+
+    <button type="submit" name="generate" value="pdf" class="btn btn-success">Guardar y generar PDF</button>
+    <button type="submit" name="generate" value="word" class="btn btn-primary">Guardar y generar Word</button>
+  </form>
+
+  <hr/>
+  <p><a href="{{ url_for('empresa_questions', empresa_id=empresa.id) }}">Ver preguntas</a> • <a href="{{ url_for('empresas_list') }}">Volver a empresas</a></p>
+</div>
+{% endblock %}

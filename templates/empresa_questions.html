@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>Preguntas - {{ empresa.nombre }}</h3>
+  <div>
+    <a href="{{ url_for('empresa_upload', empresa_id=empresa.id) }}" class="btn btn-sm btn-success">Cargar preguntas</a>
+    <a href="{{ url_for('empresa_diligenciar', empresa_id=empresa.id) }}" class="btn btn-sm btn-primary">Diligenciar</a>
+    <a href="{{ url_for('empresa_audit', empresa_id=empresa.id) }}" class="btn btn-sm btn-info">Informe</a>
+    <a href="{{ url_for('export_questions_excel', empresa_id=empresa.id) }}" class="btn btn-sm btn-warning">Exportar Excel</a>
+
+    <form action="{{ url_for('delete_all_questions', empresa_id=empresa.id) }}" 
+          method="post" style="display:inline-block;"
+          onsubmit="return confirm('¿Eliminar todas las preguntas de esta empresa?');">
+      <button class="btn btn-sm btn-danger">Eliminar todas</button>
+    </form>
+  </div>
+</div>
+
+<!-- Formulario para agregar pregunta manual -->
+<div class="card p-3 mb-3">
+  <form method="post" action="{{ url_for('add_question_manual', empresa_id=empresa.id) }}">
+    <div class="input-group">
+      <input type="text" name="question_text" class="form-control" placeholder="Nueva pregunta..." required>
+      <button class="btn btn-primary">Agregar</button>
+    </div>
+  </form>
+</div>
+
+<div class="card-custom">
+  <table class="table table-hover">
+    <thead class="table-light">
+      <tr>
+        <th>#</th><th>Pregunta</th><th>Estado</th><th>Observación</th><th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for q in questions %}
+      <tr>
+        <td>{{ q.id }}</td>
+        <td>{{ q.text }}</td>
+        <td>{{ q.state or '' }}</td>
+        <td>{{ q.observation or '' }}</td>
+        <td>
+          <a href="{{ url_for('edit_question', q_id=q.id) }}" class="btn btn-sm btn-primary">Editar</a>
+          <form action="{{ url_for('delete_question', q_id=q.id) }}" method="post" style="display:inline-block;" onsubmit="return confirm('Eliminar pregunta?');">
+            <button class="btn btn-sm btn-danger">Eliminar</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="text-center">No hay preguntas para esta empresa.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

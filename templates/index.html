@@ -1,35 +1,31 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card-custom">
-  <h3 class="mb-3">Listado de preguntas</h3>
-  <table class="table table-hover table-bordered align-middle">
-    <thead class="table-light">
-      <tr>
-        <th style="width:40px;">#</th>
-        <th>Pregunta</th>
-        <th style="width:160px;">Estado</th>
-        <th>Observación</th>
-        <th style="width:180px;">Acciones</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for q in questions %}
-      <tr>
-        <td>{{ q.id }}</td>
-        <td>{{ q.text }}</td>
-        <td>{{ q.state or '' }}</td>
-        <td>{{ q.observation or '' }}</td>
-        <td>
-          <a href="{{ url_for('edit_question', q_id=q.id) }}" class="btn btn-sm btn-primary">Editar / Responder</a>
-          <form action="{{ url_for('delete_question', q_id=q.id) }}" method="post" style="display:inline-block;" onsubmit="return confirm('Eliminar pregunta?');">
-            <button class="btn btn-sm btn-danger">Eliminar</button>
-          </form>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="5" class="text-center">No hay preguntas aún.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+
+<div class="text-center">
+  <h1 class="mb-3">Bienvenido a AuditApp</h1>
+  <p class="lead mb-4">
+    Sistema para gestión y diligenciamiento de auditorías internas.<br>
+    Selecciona una empresa para iniciar.
+  </p>
+
+  <a href="{{ url_for('empresas_list') }}" class="btn btn-primary btn-lg">
+    Gestionar Empresas
+  </a>
 </div>
+
+<div class="mt-5 row justify-content-center">
+  <div class="col-md-8">
+    <div class="card-custom">
+      <h4 class="mb-3">¿Qué puedes hacer aquí?</h4>
+      <ul>
+        <li>Crear y administrar empresas.</li>
+        <li>Cargar listados de preguntas desde archivo plano.</li>
+        <li>Diligenciar auditorías directamente en el sistema.</li>
+        <li>Generar informes en PDF y Word.</li>
+        <li>Exportar resultados y reportes.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
 {% endblock %}

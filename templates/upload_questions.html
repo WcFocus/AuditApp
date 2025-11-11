@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card-custom">
+  <h3>Cargar preguntas para: {{ empresa.nombre }}</h3>
+  <p>Sube un archivo Excel (.xlsx). El sistema leerá la primera hoja y tomará la primera columna (columna A) como preguntas, una por fila.</p>
+  <form method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+      <input type="file" name="file" accept=".xlsx" class="form-control" required>
+    </div>
+    <button class="btn btn-success">Subir y procesar</button>
+    <a href="{{ url_for('empresas_list') }}" class="btn btn-secondary">Volver</a>
+  </form>
+</div>
+{% endblock %}
